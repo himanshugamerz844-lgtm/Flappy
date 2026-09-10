@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flappy Eye — Eye Tracking Bird Game</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Poppins:wght@500;600;700;800&display=swap');
+:root{--glass:rgba(10,20,35,.72);--line:rgba(255,255,255,.16);--text:#fff}
+*{box-sizing:border-box}body{margin:0;background:#07111f;color:var(--text);font-family:Poppins,system-ui,sans-serif;overflow:hidden}
+#wrap{width:100vw;height:100vh;display:grid;place-items:center;background:
+radial-gradient(circle at 50% 15%,#2c4b79 0,#0a1426 44%,#030711 100%)}
+canvas{width:min(100vw,900px);height:min(100vh,900px);aspect-ratio:9/16;max-height:100vh;object-fit:contain;background:#7ed8ff;border-radius:26px;box-shadow:0 30px 110px #000b,0 0 0 1px #ffffff18;transform:perspective(900px) rotateX(.6deg);transition:transform .25s ease}
+#ui{position:fixed;inset:0;pointer-events:none}
+.panel{pointer-events:auto;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(92vw,620px);max-height:90vh;overflow:auto;background:linear-gradient(145deg,#101b31ee,#08101fee);border:1px solid var(--line);border-radius:26px;padding:24px;box-shadow:0 25px 90px #0009;backdrop-filter:blur(18px)}
+h1{font:800 42px/1 Baloo 2;margin:0 0 6px;text-align:center}h2{font:800 26px Baloo 2;margin:8px 0}
+.sub{text-align:center;color:#c7d5e8;margin:0 0 18px}
+.row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+button,select,.fileBtn{border:1px solid #ffffff22;background:#16233a;color:#fff;border-radius:14px;padding:11px 15px;font:700 14px Poppins;cursor:pointer}
+button:hover,.fileBtn:hover{transform:translateY(-1px);background:#203453}
+.primary{background:linear-gradient(135deg,#00c6ff,#0072ff);border:0}
+.danger{background:#64243a}.selected{outline:2px solid #55d6ff}
+#skins{display:grid;grid-template-columns:repeat(5,1fr);gap:9px;margin:12px 0 16px}
+.skin{height:64px;border-radius:16px;padding:5px;position:relative;display:grid;place-items:center;background:#ffffff0d;border:1px solid #ffffff14;cursor:pointer}
+.skin span{font-size:10px;position:absolute;bottom:2px;opacity:.75}
+.birdMini{width:38px;height:30px;border-radius:55% 48% 45% 55%;position:relative;box-shadow:inset -5px -4px #0002}
+.birdMini:after{content:"";position:absolute;right:-7px;top:10px;border-width:5px 0 5px 9px;border-style:solid;border-color:transparent transparent transparent #ffbd22}
+#stats{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;color:#dce9f7;font-size:13px}
+.badge{background:#ffffff10;padding:6px 10px;border-radius:999px}
+#gameHUD{position:absolute;top:14px;left:50%;transform:translateX(-50%);display:none;gap:12px;align-items:center}
+.hudBox{background:#081225bb;border:1px solid #fff2;border-radius:14px;padding:7px 12px;font-weight:800}
+#eyeVideo{position:fixed;right:12px;bottom:12px;width:170px;border-radius:14px;border:1px solid #fff3;display:none;transform:scaleX(-1);opacity:.8}
+#eyeStatus{font-size:12px;color:#a9d9ff;text-align:center;margin-top:6px}
+#gameOver{display:none;text-align:center}
+#gameOver .score{font:800 64px/1 Baloo 2}
+.small{font-size:12px;color:#a9b8ca;line-height:1.5}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="game" width="540" height="960"></canvas></div>
+
+<div id="ui">
+  <div id="menu" class="panel">
+    <h1>FLAPPY EYE</h1>
+    <p class="sub">Normal Flappy-style gameplay + optional eye tracking</p>
+
+    <h2>Difficulty</h2>
+    <div class="row" id="diffs">
+      <button data-d="easy">Easy</button><button data-d="medium" class="selected">Medium</button>
+      <button data-d="hard">Hard</button><button data-d="extreme">Extreme</button>
+    </div>
+
+    <h2>Bird Skin</h2>
+    <div id="skins"></div>
+    <div class="row">
+      <label class="fileBtn">Gallery से Face चुनें
+        <input id="faceInput" type="file" accept="image/*" hidden>
+      </label>
+      <button id="removeFace">Face हटाएँ</button>
+    </div>
+
+    <h2>Control</h2>
+    <div class="row">
+      <button id="mouseMode" class="selected">Keyboard / Mouse</button>
+      <button id="eyeMode">Eye Tracking</button>
+    </div>
+    <div id="eyeStatus">Eye mode के लिए camera permission और localhost/HTTPS जरूरी हो सकता है.</div>
+
+    <div class="row" style="margin-top:18px"><button id="start" class="primary">GAME START</button></div>
+    <p class="small">Keyboard: Space / ↑ • Mouse: Click • Eye mode: आँखों की vertical position bird को ऊपर/नीचे guide करती है. Camera processing local browser में होती है.</p>
+  </div>
+
+  <div id="gameHUD">
+    <div class="hudBox">SCORE <span id="score">0</span></div>
+    <div class="hudBox">BEST <span id="best">0</span></div>
+    <div class="hudBox" id="modeHUD">MEDIUM</div>
+  </div>
+
+  <div id="gameOver" class="panel">
+    <h1>GAME OVER</h1>
+    <div class="score" id="finalScore">0</div>
+    <div id="stats"></div>
+    <div class="row" style="margin-top:18px">
+      <button id="retry" class="primary">RETRY</button>
+      <button id="home">HOME</button>
+    </div>
+  </div>
+</div>
+
+<video id="eyeVideo" autoplay playsinline muted></video>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+<script>
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const W=540,H=960;
+const menu=document.getElementById('menu'),over=document.getElementById('gameOver'),hud=document.getElementById('gameHUD');
+const scoreEl=document.getElementById('score'),bestEl=document.getElementById('best'),finalEl=document.getElementById('finalScore');
+const modeHUD=document.getElementById('modeHUD'),eyeVideo=document.getElementById('eyeVideo');
+let difficulty='medium',control='keyboard',running=false,dead=false,last=0,score=0,best=+localStorage.flappyEyeBest||0;
+let bird, pipes=[], particles=[], clouds=[], faceImg=null, skin=0, eyeY=.5, camera=null, faceReady=false;
+
+const levels={
+ easy:{speed:175,gap:250,gravity:850,flap:-310,spawn:1.55,label:'EASY'},
+ medium:{speed:205,gap:215,gravity:980,flap:-335,spawn:1.38,label:'MEDIUM'},
+ hard:{speed:245,gap:185,gravity:1080,flap:-350,spawn:1.20,label:'HARD'},
+ extreme:{speed:295,gap:155,gravity:1200,flap:-365,spawn:1.03,label:'EXTREME'}
+};
+const skinColors=[
+['#ffd84d','#ff9f1c'],['#ff6b6b','#c92a2a'],['#66e3ff','#1677ff'],['#b88cff','#6534c7'],['#7dff91','#19a34a'],
+['#fff','#9aa8b8'],['#ff9bd7','#d92e8b'],['#ffb45b','#f06c00'],['#78fff0','#00a58c'],['#d7ff4f','#72a800'],
+['#f7d7b5','#9b5a35'],['#d4d4d4','#333'],['#ffc6e8','#ff4d9a'],['#a7b7ff','#3c4fc7'],['#ffe66d','#8a6500'],
+['#9cf6ff','#117a8b'],['#ff9f43','#9d3f00'],['#c7ffcb','#2d8a45'],['#e6c7ff','#8b43c9'],['#f4f4f4','#111']
+];
+
+for(let i=0;i<20;i++){
+  const d=document.createElement('div');d.className='skin'+(i===0?' selected':'');d.innerHTML='<div class="birdMini"></div><span>Skin '+(i+1)+'</span>';
+  const b=d.querySelector('.birdMini');b.style.background=`linear-gradient(145deg,${skinColors[i][0]},${skinColors[i][1]})`;
+  d.onclick=()=>{skin=i;document.querySelectorAll('.skin').forEach(x=>x.classList.remove('selected'));d.classList.add('selected')};
+  document.getElementById('skins').appendChild(d);
+}
+document.getElementById('faceInput').onchange=e=>{
+  const f=e.target.files[0]; if(!f)return;
+  const im=new Image();im.onload=()=>{faceImg=im};im.src=URL.createObjectURL(f);
+};
+document.getElementById('removeFace').onclick=()=>faceImg=null;
+document.querySelectorAll('#diffs button').forEach(b=>b.onclick=()=>{
+  difficulty=b.dataset.d;document.querySelectorAll('#diffs button').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');
+});
+document.getElementById('mouseMode').onclick=()=>setControl('keyboard');
+document.getElementById('eyeMode').onclick=()=>setControl('eye');
+function setControl(c){
+ control=c;document.querySelectorAll('#mouseMode,#eyeMode').forEach(x=>x.classList.remove('selected'));
+ document.getElementById(c==='eye'?'eyeMode':'mouseMode').classList.add('selected');
+ eyeVideo.style.display=c==='eye'?'block':'none';
+ if(c==='eye') initEye();
+}
+function reset(){
+ const L=levels[difficulty]; bird={x:145,y:H*.48,vy:0,r:22,rot:0};pipes=[];particles=[];score=0;last=0;dead=false;
+ for(let i=0;i<7;i++)clouds.push({x:Math.random()*W,y:80+Math.random()*330,s:25+Math.random()*60,v:8+Math.random()*14});
+}
+function startGame(){
+ reset();menu.style.display='none';over.style.display='none';hud.style.display='flex';
+ modeHUD.textContent=levels[difficulty].label;bestEl.textContent=best;scoreEl.textContent=0;
+ running=true;requestAnimationFrame(loop);
+}
+document.getElementById('start').onclick=startGame;
+document.getElementById('retry').onclick=startGame;
+document.getElementById('home').onclick=()=>{running=false;over.style.display='none';hud.style.display='none';menu.style.display='block'};
+function flap(){if(!running)return;if(dead){startGame();return}bird.vy=levels[difficulty].flap;for(let i=0;i<5;i++)particles.push({x:bird.x-15,y:bird.y+8,vx:-40-Math.random()*50,vy:(Math.random()-.5)*70,life:.5})}
+addEventListener('keydown',e=>{if(e.code==='Space'||e.code==='ArrowUp'){e.preventDefault();flap()}});
+canvas.addEventListener('pointerdown',flap);
+
+function spawnPipe(){
+ const L=levels[difficulty], min=160,max=H-220-L.gap;
+ const top=min+Math.random()*(max-min);
+ pipes.push({x:W+50,top,gap:L.gap,w:82,passed:false});
+}
+function circleRect(cx,cy,r,rx,ry,rw,rh){
+ const x=Math.max(rx,Math.min(cx,rx+rw)),y=Math.max(ry,Math.min(cy,ry+rh));
+ return (cx-x)**2+(cy-y)**2<r*r;
+}
+function die(){
+ if(dead)return;dead=true;running=false;
+ best=Math.max(best,score);localStorage.flappyEyeBest=best;
+ finalEl.textContent=score;document.getElementById('stats').innerHTML=`<span class="badge">${levels[difficulty].label}</span><span class="badge">${control==='eye'?'Eye Tracking':'Keyboard / Mouse'}</span><span class="badge">Best: ${best}</span>`;
+ setTimeout(()=>{hud.style.display='none';over.style.display='block'},450);
+}
+function update(dt){
+ const L=levels[difficulty];
+ if(control==='eye' && faceReady){
+   const target=H*(0.25+eyeY*.50);
+   bird.vy += (target-bird.y)*5*dt;
+   bird.vy*=.92;
+ }else bird.vy+=L.gravity*dt;
+ bird.y+=bird.vy*dt;bird.rot=Math.max(-.45,Math.min(1.1,bird.vy/550));
+ if(!pipes.length||pipes[pipes.length-1].x<W-L.spawn*L.speed)spawnPipe();
+ for(const p of pipes){
+   p.x-=L.speed*dt;
+   if(!p.passed&&p.x+p.w<bird.x){p.passed=true;score++;scoreEl.textContent=score;
+   scoreEl.animate([{transform:'scale(1)'},{transform:'scale(1.35)'},{transform:'scale(1)'}],{duration:220});
+   for(let i=0;i<14;i++)particles.push({x:bird.x,y:bird.y,vx:(Math.random()-.5)*140,vy:(Math.random()-.5)*140,life:.8})}
+   if(circleRect(bird.x,bird.y,bird.r,p.x,0,p.w,p.top)||circleRect(bird.x,bird.y,bird.r,p.x,p.top+p.gap,p.w,H)){
+     die();
+   }
+ }
+ pipes=pipes.filter(p=>p.x>-100);
+ if(bird.y-bird.r<0||bird.y+bird.r>H-75)die();
+ for(const c of clouds){c.x-=c.v*dt;if(c.x<-100)c.x=W+80}
+ for(const p of particles){p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt}
+ particles=particles.filter(p=>p.life>0);
+}
+function drawBird(){
+ const s=skinColors[skin];ctx.save();ctx.translate(bird.x,bird.y);ctx.rotate(bird.rot);
+ // Soft contact/shadow
+ ctx.save();ctx.globalAlpha=.24;ctx.filter='blur(5px)';ctx.fillStyle='#000';
+ ctx.beginPath();ctx.ellipse(5,22,29,7,0,0,Math.PI*2);ctx.fill();ctx.restore();
+
+ // 3D body
+ const body=ctx.createRadialGradient(-8,-10,4,5,5,34);
+ body.addColorStop(0,'#ffffffcc');body.addColorStop(.12,s[0]);
+ body.addColorStop(.72,s[1]);body.addColorStop(1,'#0008');
+ ctx.shadowBlur=22;ctx.shadowColor=s[0]+'aa';
+ ctx.fillStyle=body;ctx.beginPath();ctx.ellipse(0,0,28,24,0,0,Math.PI*2);ctx.fill();
+ ctx.shadowBlur=0;
+
+ // Wing depth
+ const wing=ctx.createLinearGradient(-22,0,12,18);
+ wing.addColorStop(0,'#ffffff66');wing.addColorStop(.25,s[0]);wing.addColorStop(1,s[1]);
+ ctx.fillStyle=wing;ctx.beginPath();ctx.ellipse(-8,8,18,9,-.25,0,Math.PI*2);ctx.fill();
+ ctx.strokeStyle='#0003';ctx.lineWidth=2;ctx.stroke();
+
+ // Beak with depth
+ const beak=ctx.createLinearGradient(22,-1,42,10);beak.addColorStop(0,'#ffe17a');beak.addColorStop(.55,'#ffb316');beak.addColorStop(1,'#d87900');
+ ctx.fillStyle=beak;ctx.beginPath();ctx.moveTo(20,-3);ctx.quadraticCurveTo(32,-2,43,5);ctx.lineTo(21,11);ctx.closePath();ctx.fill();
+
+ // Eye + specular
+ ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(10,-9,8,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#101418';ctx.beginPath();ctx.arc(12,-9,3.4,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(13,-10,1.3,0,Math.PI*2);ctx.fill();
+
+ // Gallery face
+ if(faceImg){ctx.save();ctx.beginPath();ctx.arc(2,0,14,0,Math.PI*2);ctx.clip();
+   ctx.globalAlpha=.94;ctx.drawImage(faceImg,-12,-14,29,29);ctx.restore();}
+
+ ctx.restore();
+}
+function draw(){
+ const t=performance.now()*0.0015;
+ const g=ctx.createLinearGradient(0,0,0,H);
+ g.addColorStop(0,'#77dfff');g.addColorStop(.48,'#b8f1ff');g.addColorStop(1,'#f7fbff');
+ ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+
+ // depth haze
+ const haze=ctx.createLinearGradient(0,H*.42,0,H);
+ haze.addColorStop(0,'#ffffff00');haze.addColorStop(1,'#ffffff7a');ctx.fillStyle=haze;ctx.fillRect(0,H*.42,W,H*.58);
+
+ // distant mountains for depth
+ ctx.fillStyle='#6aaea755';ctx.beginPath();ctx.moveTo(0,H-120);ctx.lineTo(90,H-240);ctx.lineTo(170,H-140);ctx.lineTo(270,H-270);ctx.lineTo(390,H-150);ctx.lineTo(540,H-250);ctx.lineTo(540,H-75);ctx.lineTo(0,H-75);ctx.closePath();ctx.fill();
+ // sun
+ ctx.fillStyle='#fff6a3';ctx.beginPath();ctx.arc(425,115,55,0,Math.PI*2);ctx.fill();
+ // parallax clouds
+ ctx.fillStyle='#fff9';for(const c of clouds){ctx.beginPath();ctx.arc(c.x,c.y,c.s*.45,0,Math.PI*2);ctx.arc(c.x+c.s*.45,c.y-8,c.s*.35,0,Math.PI*2);ctx.arc(c.x+c.s*.78,c.y,c.s*.4,0,Math.PI*2);ctx.fill()}
+ for(const p of pipes){
+   const grad=ctx.createLinearGradient(p.x,0,p.x+p.w,0);
+   grad.addColorStop(0,'#126f32');grad.addColorStop(.18,'#35bf56');grad.addColorStop(.42,'#a4ff7a');
+   grad.addColorStop(.64,'#4bd861');grad.addColorStop(1,'#0d6a30');ctx.fillStyle=grad;
+   ctx.fillRect(p.x,0,p.w,p.top);ctx.fillRect(p.x-7,p.top-24,p.w+14,24);
+   ctx.fillRect(p.x,p.top+p.gap,p.w,H);ctx.fillRect(p.x-7,p.top+p.gap,p.w+14,24);
+
+   // inner rim + specular shine
+   ctx.fillStyle='#ffffff2c';ctx.fillRect(p.x+9,0,10,p.top);
+   ctx.fillRect(p.x+9,p.top+p.gap,10,H);
+   ctx.fillStyle='#08391a55';ctx.fillRect(p.x+p.w-10,0,10,p.top);
+   ctx.fillRect(p.x+p.w-10,p.top+p.gap,10,H);
+   ctx.strokeStyle='#d0ffd055';ctx.lineWidth=2;
+   ctx.strokeRect(p.x-7,p.top-24,p.w+14,24);ctx.strokeRect(p.x-7,p.top+p.gap,p.w+14,24);
+ }
+ ctx.fillStyle='#5ecb52';ctx.fillRect(0,H-75,W,75);ctx.fillStyle='#9be66d';for(let x=0;x<W;x+=28)ctx.fillRect((x-(performance.now()/12)%28),H-75,15,7);
+ for(const p of particles){ctx.globalAlpha=Math.max(0,p.life/.7);ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(p.x,p.y,3,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1}
+ drawBird();
+}
+function loop(t){
+ if(!running)return;const dt=Math.min(.033,(t-(last||t))/1000);last=t;update(dt);draw();requestAnimationFrame(loop);
+}
+draw();
+
+// Eye tracking: MediaPipe Face Mesh. It is optional; normal control stays lightweight.
+async function initEye(){
+ if(faceReady)return;
+ try{
+   const stream=await navigator.mediaDevices.getUserMedia({video:{width:320,height:240,facingMode:'user'},audio:false});
+   eyeVideo.srcObject=stream;
+   const mesh=new FaceMesh({locateFile:(file)=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
+   mesh.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:.55,minTrackingConfidence:.55});
+   mesh.onResults(res=>{
+     if(res.multiFaceLandmarks&&res.multiFaceLandmarks[0]){
+       const lm=res.multiFaceLandmarks[0];
+       // Eye/face vertical position. Smooth it heavily to reduce jitter.
+       const y=(lm[159].y+lm[386].y)/2;
+       eyeY=eyeY*.82+y*.18;faceReady=true;
+       document.getElementById('eyeStatus').textContent='Eye tracking: ACTIVE';
+     }else{
+       faceReady=false;document.getElementById('eyeStatus').textContent='Face नहीं मिला — camera के सामने रहें.';
+     }
+   });
+   camera=new Camera(eyeVideo,{onFrame:async()=>{await mesh.send({image:eyeVideo})},width:320,height:240});
+   camera.start();
+ }catch(e){
+   faceReady=false;
+   document.getElementById('eyeStatus').textContent='Camera access नहीं मिला. Browser permission दें या normal control इस्तेमाल करें.';
+ }
+}
+</script>
+</body>
+</html>
